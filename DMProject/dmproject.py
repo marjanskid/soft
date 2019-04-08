@@ -5,8 +5,15 @@ import matplotlib.pyplot as plt
 
 from skimage.transform import (hough_line, hough_line_peaks)
 
+import tensorflow as tf
+import neural_network as nn
+
+number_size = 28
+
 ################### Funkcije ###################
 # 1 funkcija za pronalazenje odabrane linije (zelena/crvena)
+
+
 def find_line(image, color):
 
     colorless_img = image.copy()
@@ -41,6 +48,8 @@ def find_line(image, color):
     return a1, b1, a2, b2
 
 # 2 funkcija koja sluzi kao provera pronalazenja linija za sabiranje i oduzimanje
+
+
 def generate_test_figure(frame, green_line_coords, blue_line_coords):
 
     # Generating figure 1
@@ -75,6 +84,8 @@ def generate_test_figure(frame, green_line_coords, blue_line_coords):
     plt.show()
 
 # 3 funkcija koja sluzi za izdvajanje brojeva
+
+
 def get_number_contours(frame):
     frame_copy = frame.copy()
     max_boundary = np.array([255, 255, 255])
@@ -84,20 +95,44 @@ def get_number_contours(frame):
 
     #cv2.imshow("number_image", only_numbers_image)
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
-    iterations = 2
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    iterations = 3
     number = cv2.dilate(only_numbers_image, kernel, iterations)
     #cv2.imshow("dilate", number)
-    frame_copy = cv2.bitwise_and(frame_copy, frame_copy, mask=number)
 
+    ###prikaz brojeva###
+    #frame_copy = cv2.bitwise_and(frame_copy, frame_copy, mask=number)
     #cv2.imshow('Numbers', frame_copy)
 
-    #provera - postavljanje belog okvira oko cifre, dok su cifre crne boje
+    # provera### - postavljanje belog okvira oko cifre, dok su cifre crne boje
     #blur = cv2.GaussianBlur(only_numbers_image, (5, 5), 0)
     #thresh = cv2.adaptiveThreshold(blur, 255, 1, 1, 11, 2)
     #cv2.imshow("thresh", thresh)
 
     return cv2.findContours(number, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+def shift_number_bounds(x, y, h, w):
+    y_shift = int((number_size - h)/2)
+    x_shift = int((number_size - w)/2)
+    if (y - y_shift >= 0):
+        y -= y_shift
+    else:
+        y = 0
+
+    if (x - x_shift >= 0):
+        x -= x_shift
+    else:
+        x = 0
+
+    x_bound = x + number_size
+    if x_bound > frame_width:
+        x_bound = frame_width
+
+    y_bound = y + number_size
+    if y_bound > frame_height:
+        y_bound = frame_height
+
+    return x, y, x_bound, y_bound
 
 ################### Glavni tok programa ###################
 #
@@ -105,6 +140,8 @@ def get_number_contours(frame):
 # Kreiranje VideoCapture objekta na osnovu prosledjene putanje do fajla
 video_path = "video-9.avi"
 cap = cv2.VideoCapture(video_path)
+
+neural_network = nn.NeuralNetwork()
 
 # Provera da li je camera uspesno pokrenuta
 if (cap.isOpened() == False):
@@ -115,6 +152,9 @@ ret, detect_line_image = cap.read()
 green_line_coords = find_line(detect_line_image, "green")
 blue_line_coords = find_line(detect_line_image, "blue")
 
+frame_height = detect_line_image.shape[0] 
+frame_width = detect_line_image.shape[1]
+
 # Citaj do zavrsetka snimka
 while cap.isOpened():
     # Snimaj frejm po frejm
@@ -122,28 +162,39 @@ while cap.isOpened():
     frame_number += 1
     if ret == True:
         # Prikaz svakog frejma
-        cv2.imshow(video_path, frame)
-        print(frame_number)
+        #cv2.imshow(video_path, frame)
+        #print(frame_number)
+
         # Pretvaranje frejma u grayscale
         gray_scale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # cv2.imshow(video_path, gray_scale)
-        
+
         # Classic straight-line Hough transform
-        h, theta, d = hough_line(gray_scale)
+        #h, theta, d = hough_line(gray_scale)
 
         #generate_test_figure(frame, green_line_coords, blue_line_coords)
         img, contours, hierarchy = get_number_contours(frame)
 
-        for i in range(0, len(contours)):
+        for i in range(len(contours)):
 
             number_contour = contours[i]
             x, y, w, h = cv2.boundingRect(number_contour)
-            cv2.rectangle(frame, (x-5, y-5), (x+w+5, y+h+5), (0, 255, 0), 2)
 
-            #rect = cv2.minAreaRect(number_contour)
-            #box = cv2.boxPoints(rect)
-            #box = np.int0(box)
-            #cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
+            if w < 6 or h < 11:
+                continue
+            
+            x, y, x_bound, y_bound = shift_number_bounds(x, y, h, w)
+            cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
+            number_region = frame[y: y_bound, x: x_bound]
+            cv2.imshow("number_region", number_region)
+
+            number_region_gray = cv2.cvtColor(number_region, cv2.COLOR_BGR2GRAY)
+
+            #print('--------------------------------')
+            #print(len(number_region_gray))
+            #number_reshaped = number_region_gray.reshape(1, number_size, number_size, 1)
+            #broj = neural_network.predict_number(number_reshaped)
+            #print(broj)
 
         cv2.imshow("Rectangle number", frame)
 
