@@ -14,8 +14,8 @@ class NeuralNetwork:
     network_weights = None
 
     def __init__(self):
-        self.network = Path('network.json')
-        self.network_weights = Path("network.h5")
+        self.network = Path('Network/network.json')
+        self.network_weights = Path("Network/network.h5")
         
         if self.network.is_file():
             print("Ucitan fajl sa sacuvanim modelom")
@@ -28,12 +28,12 @@ class NeuralNetwork:
 
     def load(self):
         # load json and create model
-        json_file = open('network.json', 'r')
+        json_file = open('Network/network.json', 'r')
         loaded_model_json = json_file.read()
         json_file.close()
         self.network = model_from_json(loaded_model_json)
         # load weights into new model
-        self.network.load_weights('network.h5')
+        self.network.load_weights('Network/network.h5')
         print("Loaded model from disk...")
 
     def create(self):
@@ -99,15 +99,16 @@ class NeuralNetwork:
         print("Cuvanje modela mreze u toku...")
         # serialize model to JSON
         network_json = self.network.to_json()
-        with open("network.json", "w") as json_file:
+        with open("Network/network.json", "w") as json_file:
             json_file.write(network_json)
         # serialize weights to HDF5
-        self.network.save_weights("network.h5", overwrite=True)
+        self.network.save_weights("Network/network.h5", overwrite=True)
         print("Saved model to disk")
 
     # 3 - funkcija koja vrsi predikciju broja
-    def predict_number(self, image_part):
-        img_rows = 28
-        img_cols = 28
-        prediction = self.network.predict(image_part.reshape(1, img_rows, img_cols, 1))
+    def predict_number(self, image_part, img_rows, img_cols):
+        number_region_gray = cv2.cvtColor(image_part, cv2.COLOR_BGR2GRAY)
+        number_region_reshaped = number_region_gray.reshape(1, img_rows, img_cols, 1)
+        #cv2.show("pre predikcije", number_region_reshaped)
+        prediction = self.network.predict(number_region_reshaped)
         return prediction.argmax()
