@@ -9,11 +9,14 @@ import tensorflow as tf
 import neural_network as nn
 
 number_size = 28
+number_img_rows = 28
+number_img_cols = 28
+
+import time
 
 ################### Funkcije ###################
+
 # 1 funkcija za pronalazenje odabrane linije (zelena/crvena)
-
-
 def find_line(image, color):
 
     colorless_img = image.copy()
@@ -48,8 +51,6 @@ def find_line(image, color):
     return a1, b1, a2, b2
 
 # 2 funkcija koja sluzi kao provera pronalazenja linija za sabiranje i oduzimanje
-
-
 def generate_test_figure(frame, green_line_coords, blue_line_coords):
 
     # Generating figure 1
@@ -84,21 +85,22 @@ def generate_test_figure(frame, green_line_coords, blue_line_coords):
     plt.show()
 
 # 3 funkcija koja sluzi za izdvajanje brojeva
-
-
 def get_number_contours(frame):
     frame_copy = frame.copy()
     max_boundary = np.array([255, 255, 255])
-    min_boundary = np.array([150, 150, 150])
+    min_boundary = np.array([200, 200, 200])
 
     only_numbers_image = cv2.inRange(frame_copy, min_boundary, max_boundary)
-
     #cv2.imshow("number_image", only_numbers_image)
+    #only_numbers_image = cv2.medianBlur(only_numbers_image,3)
+    #cv2.imshow("medianBlur", only_numbers_image)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    iterations = 3
+    iterations = 1
     number = cv2.dilate(only_numbers_image, kernel, iterations)
     #cv2.imshow("dilate", number)
+    number = cv2.erode(number, kernel, iterations)
+    #cv2.imshow("erode", number)
 
     ###prikaz brojeva###
     #frame_copy = cv2.bitwise_and(frame_copy, frame_copy, mask=number)
@@ -109,36 +111,57 @@ def get_number_contours(frame):
     #thresh = cv2.adaptiveThreshold(blur, 255, 1, 1, 11, 2)
     #cv2.imshow("thresh", thresh)
 
-    return cv2.findContours(number, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #number = only_numbers_image
+    cv2.imshow("dilate + erode", number)
 
+    return cv2.findContours(number, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+# 4 funkcija koja podesava granice regiona cifre
 def shift_number_bounds(x, y, h, w):
-    y_shift = int((number_size - h)/2)
-    x_shift = int((number_size - w)/2)
-    if (y - y_shift >= 0):
+    y_shift = int((number_img_rows - h)/2)
+    x_shift = int((number_img_cols - w)/2)
+    if (y - y_shift) >= 0:
         y -= y_shift
     else:
         y = 0
 
-    if (x - x_shift >= 0):
+    if (x - x_shift) >= 0:
         x -= x_shift
     else:
         x = 0
 
-    x_bound = x + number_size
+    x_bound = x + number_img_cols
     if x_bound > frame_width:
         x_bound = frame_width
 
-    y_bound = y + number_size
+    y_bound = y + number_img_rows
     if y_bound > frame_height:
         y_bound = frame_height
 
     return x, y, x_bound, y_bound
 
+# 5 funkcija koja proverava da li su visina i sirina regiona broja odgovarajuce
+def check_number_boundaries(number_region):
+    number_height = number_region.shape[0]
+    if number_height < number_img_rows:
+        return False
+
+    number_width = number_region.shape[1]
+    if number_width < number_img_cols:
+        return False
+
+    return True
+
+
 ################### Glavni tok programa ###################
 #
 #
+# Kreiranje zaglavlja u fajlu za ispis dobijenih rezultata
+output_file = open('out.txt', 'w')
+output_file.write("RA31/2015 Dusan Marjanski" + '\n' + "file" + '\t' + "sum" + '\n')
+
 # Kreiranje VideoCapture objekta na osnovu prosledjene putanje do fajla
-video_path = "video-9.avi"
+video_path = "video-2.avi"
 cap = cv2.VideoCapture(video_path)
 
 neural_network = nn.NeuralNetwork()
@@ -152,7 +175,7 @@ ret, detect_line_image = cap.read()
 green_line_coords = find_line(detect_line_image, "green")
 blue_line_coords = find_line(detect_line_image, "blue")
 
-frame_height = detect_line_image.shape[0] 
+frame_height = detect_line_image.shape[0]
 frame_width = detect_line_image.shape[1]
 
 # Citaj do zavrsetka snimka
@@ -163,18 +186,15 @@ while cap.isOpened():
     if ret == True:
         # Prikaz svakog frejma
         #cv2.imshow(video_path, frame)
-        #print(frame_number)
+        # print(frame_number)
 
         # Pretvaranje frejma u grayscale
         gray_scale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # cv2.imshow(video_path, gray_scale)
 
-        # Classic straight-line Hough transform
-        #h, theta, d = hough_line(gray_scale)
-
         #generate_test_figure(frame, green_line_coords, blue_line_coords)
         img, contours, hierarchy = get_number_contours(frame)
-
+        print("########## novi frejm no: " + str(frame_number) + " ###############")
         for i in range(len(contours)):
 
             number_contour = contours[i]
@@ -182,26 +202,31 @@ while cap.isOpened():
 
             if w < 6 or h < 11:
                 continue
-            
+
             x, y, x_bound, y_bound = shift_number_bounds(x, y, h, w)
-            cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
             number_region = frame[y: y_bound, x: x_bound]
             cv2.imshow("number_region", number_region)
+            cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
+            
 
-            number_region_gray = cv2.cvtColor(number_region, cv2.COLOR_BGR2GRAY)
+            if check_number_boundaries(number_region) is False:
+                continue
 
-            #print('--------------------------------')
-            #print(len(number_region_gray))
-            #number_reshaped = number_region_gray.reshape(1, number_size, number_size, 1)
-            #broj = neural_network.predict_number(number_reshaped)
-            #print(broj)
+            #cv2.imshow('number_region', number_region)
+            #print('height: ' + str(number_region.shape[0]))
+            #print('width: ' + str(number_region.shape[1]))
 
-        cv2.imshow("Rectangle number", frame)
+            predicted_number = neural_network.predict_number(number_region, number_img_rows, number_img_cols)
+            print(predicted_number)
+            cv2.imshow(str(predicted_number), number_region)
+            
+        cv2.imshow('Rectangle number', frame)
+        time.sleep(.5)
 
         # Pritisak na taster Q za izlazak
         if cv2.waitKey(25) & 0xFF == ord('q'):
             break
-
+            
     # Izlazak iz petlje
     else:
         break
@@ -210,3 +235,5 @@ while cap.isOpened():
 cap.release()
 # Zatvoriti sve prozore
 cv2.destroyAllWindows()
+
+output_file.close()
