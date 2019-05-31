@@ -1,3 +1,8 @@
+# coding=utf-8
+__author__    = 'Dušan Marjanski <marjanskid@yahoo.com>'
+__date__      = '6 April 2019'
+__copyright__ = 'Copyright (c) 2019 Dušan Marjanski'
+
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2
@@ -111,4 +116,5 @@ class NeuralNetwork:
         number_region_reshaped = number_region_gray.reshape(1, img_rows, img_cols, 1)
         #cv2.show("pre predikcije", number_region_reshaped)
         prediction = self.network.predict(number_region_reshaped)
+        cv2.imshow("number_region_gray", number_region_gray)
         return prediction.argmax()

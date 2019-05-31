@@ -1,3 +1,8 @@
+# coding=utf-8
+__author__    = 'Dušan Marjanski <marjanskid@yahoo.com>'
+__date__      = '31 January 2019'
+__copyright__ = 'Copyright (c) 2019 Dušan Marjanski'
+
 import cv2
 import scipy
 import numpy as np
@@ -95,11 +100,12 @@ def get_number_contours(frame):
     #only_numbers_image = cv2.medianBlur(only_numbers_image,3)
     #cv2.imshow("medianBlur", only_numbers_image)
 
+    # ovde ima prostora za štimanje kad dođe do procenata
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    iterations = 1
+    iterations = 2
     number = cv2.dilate(only_numbers_image, kernel, iterations)
     #cv2.imshow("dilate", number)
-    number = cv2.erode(number, kernel, iterations)
+    number = cv2.erode(number, kernel, iterations=1)
     #cv2.imshow("erode", number)
 
     ###prikaz brojeva###
@@ -161,7 +167,7 @@ output_file = open('out.txt', 'w')
 output_file.write("RA31/2015 Dusan Marjanski" + '\n' + "file" + '\t' + "sum" + '\n')
 
 # Kreiranje VideoCapture objekta na osnovu prosledjene putanje do fajla
-video_path = "video-2.avi"
+video_path = "video-9.avi"
 cap = cv2.VideoCapture(video_path)
 
 neural_network = nn.NeuralNetwork()
@@ -196,32 +202,30 @@ while cap.isOpened():
         img, contours, hierarchy = get_number_contours(frame)
         print("########## novi frejm no: " + str(frame_number) + " ###############")
         for i in range(len(contours)):
-
             number_contour = contours[i]
             x, y, w, h = cv2.boundingRect(number_contour)
 
-            if w < 6 or h < 11:
-                continue
+            #if w < 6 or h < 11:
+            #    continue
+            frame_copy = frame.copy()
+            if (h >= 15 and h <= 25) or (w > 10 and h >= 14) and (hierarchy[0][i][3] == -1):
+                x, y, x_bound, y_bound = shift_number_bounds(x, y, h, w)
+                number_region = frame_copy[y: y_bound, x: x_bound]
+                cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
+                
+                if check_number_boundaries(number_region) is False:
+                    continue
 
-            x, y, x_bound, y_bound = shift_number_bounds(x, y, h, w)
-            number_region = frame[y: y_bound, x: x_bound]
-            cv2.imshow("number_region", number_region)
-            cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
-            
+                cv2.imshow('number_region', number_region)
+                #print('height: ' + str(number_region.shape[0]))
+                #print('width: ' + str(number_region.shape[1]))
 
-            if check_number_boundaries(number_region) is False:
-                continue
-
-            #cv2.imshow('number_region', number_region)
-            #print('height: ' + str(number_region.shape[0]))
-            #print('width: ' + str(number_region.shape[1]))
-
-            predicted_number = neural_network.predict_number(number_region, number_img_rows, number_img_cols)
-            print(predicted_number)
-            cv2.imshow(str(predicted_number), number_region)
+                predicted_number = neural_network.predict_number(number_region, number_img_rows, number_img_cols)
+                print(str(predicted_number) + ", x=" + str(x) + ", y=" + str(y))
+                cv2.imshow(str(predicted_number), number_region)
+                time.sleep(.5)
             
         cv2.imshow('Rectangle number', frame)
-        time.sleep(.5)
 
         # Pritisak na taster Q za izlazak
         if cv2.waitKey(25) & 0xFF == ord('q'):
