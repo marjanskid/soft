@@ -7,11 +7,15 @@ import cv2
 import scipy
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 from skimage.transform import (hough_line, hough_line_peaks)
 
 import tensorflow as tf
+
+# my imports
 import neural_network as nn
+import digit_tracker as dt
 
 number_size = 28
 number_img_rows = 28
@@ -23,9 +27,7 @@ import time
 
 # 1 funkcija za pronalazenje odabrane linije (zelena/crvena)
 def find_line(image, color):
-
     colorless_img = image.copy()
-
     if color == "green":
         # na ovaj nacin zanemarujem plavi spektar boje
         colorless_img[:, :, 0] = 0
@@ -34,7 +36,6 @@ def find_line(image, color):
         colorless_img[:, :, 1] = 0
 
     gray_scale_img = cv2.cvtColor(colorless_img, cv2.COLOR_BGR2GRAY)
-
     _, t = cv2.threshold(gray_scale_img, 25, 200, cv2.THRESH_BINARY)
 
     #img_edges = cv2.Canny(t, 25, 200, None, 3)
@@ -118,7 +119,7 @@ def get_number_contours(frame):
     #cv2.imshow("thresh", thresh)
 
     #number = only_numbers_image
-    cv2.imshow("dilate + erode", number)
+    #cv2.imshow("dilate + erode", number)
 
     return cv2.findContours(number, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -158,7 +159,6 @@ def check_number_boundaries(number_region):
 
     return True
 
-
 ################### Glavni tok programa ###################
 #
 #
@@ -166,78 +166,111 @@ def check_number_boundaries(number_region):
 output_file = open('out.txt', 'w')
 output_file.write("RA31/2015 Dusan Marjanski" + '\n' + "file" + '\t' + "sum" + '\n')
 
-# Kreiranje VideoCapture objekta na osnovu prosledjene putanje do fajla
-video_path = "video-9.avi"
-cap = cv2.VideoCapture(video_path)
+for i in range(0,10):
+    # Kreiranje VideoCapture objekta na osnovu prosledjene putanje do fajla
+    video_path = "video-" + str(i) + ".avi"
+    cap = cv2.VideoCapture(video_path)
 
-neural_network = nn.NeuralNetwork()
+    # Provera da li je camera uspesno pokrenuta
+    if (cap.isOpened() == False):
+        print("Greska pri otvaranju video snimka sa prosledjene putanje : " + video_path)
 
-# Provera da li je camera uspesno pokrenuta
-if (cap.isOpened() == False):
-    print("Greska pri otvaranju video snimka sa prosledjene putanje : " + video_path)
+    frame_number = 0
+    ret, detect_line_image = cap.read()
 
-frame_number = 0
-ret, detect_line_image = cap.read()
-green_line_coords = find_line(detect_line_image, "green")
-blue_line_coords = find_line(detect_line_image, "blue")
+    blue_line_coords = find_line(detect_line_image, "blue")
+    green_line_coords = find_line(detect_line_image, "green")
 
-frame_height = detect_line_image.shape[0]
-frame_width = detect_line_image.shape[1]
+    #print("blue: " + str(blue_line_coords))
+    #print("green: " + str(green_line_coords))
 
-# Citaj do zavrsetka snimka
-while cap.isOpened():
-    # Snimaj frejm po frejm
-    ret, frame = cap.read()
-    frame_number += 1
-    if ret == True:
-        # Prikaz svakog frejma
-        #cv2.imshow(video_path, frame)
-        # print(frame_number)
+    """ Inicijalizacija tracker-a za brojeve """
+    digit_tracker = dt.DigitTracker(blue_line_coords, green_line_coords)
 
-        # Pretvaranje frejma u grayscale
-        gray_scale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # cv2.imshow(video_path, gray_scale)
+    frame_height = detect_line_image.shape[0]
+    frame_width = detect_line_image.shape[1]
 
-        #generate_test_figure(frame, green_line_coords, blue_line_coords)
-        img, contours, hierarchy = get_number_contours(frame)
-        print("########## novi frejm no: " + str(frame_number) + " ###############")
-        for i in range(len(contours)):
-            number_contour = contours[i]
-            x, y, w, h = cv2.boundingRect(number_contour)
+    # Citaj do zavrsetka snimka
+    while cap.isOpened():
+        # Snimaj frejm po frejm
+        ret, frame = cap.read()
+        frame_number += 1
+        check_frame = frame_number % 5
+        if ret is True:
+            #if check_frame is 1:
+            # Prikaz svakog frejma
+            #cv2.imshow(video_path, frame)
+            # print(frame_number)
 
-            #if w < 6 or h < 11:
-            #    continue
+            # Pretvaranje frejma u grayscale
+            gray_scale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # cv2.imshow(video_path, gray_scale)
+
+            """ Test funkcije """
+            #generate_test_figure(frame, green_line_coords, blue_line_coords)
+            """ Test funkcije """
+
+            img, contours, hierarchy = get_number_contours(frame)
+            prediction_contours_found = []
+            tracking_contours_found = []
             frame_copy = frame.copy()
-            if (h >= 15 and h <= 25) or (w > 10 and h >= 14) and (hierarchy[0][i][3] == -1):
+            #print("########## novi frejm no: " + str(frame_number) + " ###############")
+            for i in range(len(contours)):
+                number_contour = contours[i]
+                x, y, w, h = cv2.boundingRect(number_contour)
+
+                if w < 6 or h < 11:
+                    continue
+
+                #if (h >= 15 and h <= 25) or (w > 10 and h >= 14) and (hierarchy[0][i][3] == -1):
                 x, y, x_bound, y_bound = shift_number_bounds(x, y, h, w)
                 number_region = frame_copy[y: y_bound, x: x_bound]
-                cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
-                
+                #cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
+
                 if check_number_boundaries(number_region) is False:
                     continue
 
-                cv2.imshow('number_region', number_region)
+                tracking_region = np.array([x, y, x_bound, y_bound])
+
+                # dodavanje pronadjene konture u listu
+                prediction_contours_found.append(number_region)
+                tracking_contours_found.append(tracking_region.astype("int"))
+
+                #--------- test ------------
+                #cv2.imshow('number_region', number_region)
+                #--------- test ------------
+                cv2.rectangle(frame, (x, y), (x_bound, y_bound), (200, 255, 0), 2)
+                
+                #--------- test ------------
                 #print('height: ' + str(number_region.shape[0]))
                 #print('width: ' + str(number_region.shape[1]))
+                #--------- test ------------
 
-                predicted_number = neural_network.predict_number(number_region, number_img_rows, number_img_cols)
-                print(str(predicted_number) + ", x=" + str(x) + ", y=" + str(y))
-                cv2.imshow(str(predicted_number), number_region)
-                time.sleep(.5)
-            
-        cv2.imshow('Rectangle number', frame)
+            # slanje digit_tracker-u svih pronadjenih kontura
+            #if (frame_number is not 27):
+            digit_tracker.update_digits(prediction_contours_found, tracking_contours_found)
+            #print("trenutna suma: " + str(digit_tracker.sum))
+            #digit_tracker.all_digits_to_str()
+            # ispis trenutnog frejma sa okvirima oko kontura 
+            #cv2.imshow('Rectangle number', frame)
 
-        # Pritisak na taster Q za izlazak
-        if cv2.waitKey(25) & 0xFF == ord('q'):
+            # Pritisak na taster Q za izlazak
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+                break
+                    
+        # Izlazak iz petlje
+        else:
             break
-            
-    # Izlazak iz petlje
-    else:
-        break
 
-# Na kraju, osloboditi video objekat
-cap.release()
-# Zatvoriti sve prozore
-cv2.destroyAllWindows()
+    #print('stigli smo do kraja video')
+
+    # Na kraju, osloboditi video objekat
+    cap.release()
+    # Zatvoriti sve prozore
+    cv2.destroyAllWindows()
+
+    print(video_path + '\t' + str(digit_tracker.sum) + '\n')
+
+    output_file.write(video_path + '\t' + str(digit_tracker.sum) + '\n')
 
 output_file.close()

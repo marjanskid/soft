@@ -1,54 +1,54 @@
-import numpy as np
+class DigitCoords:
+    def __init__(self, center_x, center_y):
+        self.x = center_x
+        self.y = center_y
 
-from skimage.transform import (hough_line, hough_line_peaks,
-                               probabilistic_hough_line)
-from skimage.feature import canny
-from skimage import data
+    def get_x(self):
+        return self.x
+    
+    def set_x(self, new_center_x):
+        self.x = new_center_x
 
-import matplotlib.pyplot as plt
-from matplotlib import cm
+    def get_y(self):
+        return self.y
 
+    def set_y(self, new_center_y):
+        self.y = new_center_y
 
-# Constructing test image
-image = np.zeros((100, 100))
-idx = np.arange(25, 75)
-image[idx[::-1], idx] = 255
-image[idx, idx] = 255
+def ccw(A,B,C):
+        return (C.y-A.y) * (B.x-A.x) > (B.y-A.y) * (C.x-A.x)
 
-# Classic straight-line Hough transform
-h, theta, d = hough_line(image)
+def intersect(A,B,C,D):
+    return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
 
-# Generating figure 1
-fig, axes = plt.subplots(1, 3, figsize=(15, 6))
-ax = axes.ravel()
+def check_for_crossing_lines(blue_line, green_line):
+    """Proverava da li je presecena linija."""
+    blue_line_crossed = False
+    green_line_crossed = False
+    C = DigitCoords(468, 155)
+    D = DigitCoords(542, 245)
+    print("first time coords: [ " + str(C.get_x()) + " : " + str(C.get_y()) + " ]")
+    print("last time coords: [ " + str(D.get_x()) + " : " + str(D.get_y()) + " ]")
+    
+    A = DigitCoords(blue_line[0], blue_line[1])
+    B = DigitCoords(blue_line[2], blue_line[3])
+    print("blue 1. spot coords: [ " + str(A.get_x()) + " : " + str(A.get_y()) + " ]")
+    print("blue 2. spot coords: [ " + str(B.get_x()) + " : " + str(B.get_y()) + " ]")           
+    if intersect(A,B,C,D):
+        blue_line_crossed = True
+        
+    A = DigitCoords(green_line[0], green_line[1])
+    B = DigitCoords(green_line[2], green_line[3])
+    print("green 1. spot coords: [ " + str(A.get_x()) + " : " + str(A.get_y()) + " ]")
+    print("green 2. spot coords: [ " + str(B.get_x()) + " : " + str(B.get_y()) + " ]")            
+    if intersect(A,B,C,D):
+        green_line_crossed = True
 
-ax[0].imshow(image, cmap=cm.gray)
-ax[0].set_title('Input image')
-ax[0].set_axis_off()
+    return blue_line_crossed, green_line_crossed
 
-ax[1].imshow(np.log(1 + h),
-             extent=[np.rad2deg(theta[-1]), np.rad2deg(theta[0]), d[-1], d[0]],
-             cmap=cm.gray, aspect=1/1.5)
-ax[1].set_title('Hough transform')
-ax[1].set_xlabel('Angles (degrees)')
-ax[1].set_ylabel('Distance (pixels)')
-ax[1].axis('image')
+blue = (290, 204, 492, 52)
+green = (153, 385, 405, 231)
 
-ax[2].imshow(image, cmap=cm.gray)
-for _, angle, dist in zip(*hough_line_peaks(h, theta, d)):
-    y0 = (dist - 0 * np.cos(angle)) / np.sin(angle)
-    y1 = (dist - image.shape[1] * np.cos(angle)) / np.sin(angle)
-    ax[2].plot((0, image.shape[1]), (y0, y1), '-r')
-ax[2].set_xlim((0, image.shape[1]))
-ax[2].set_ylim((image.shape[0], 0))
-ax[2].set_axis_off()
-ax[2].set_title('Detected lines')
-
-plt.tight_layout()
-plt.show()
-
-for a in ax:
-    a.set_axis_off()
-
-plt.tight_layout()
-plt.show()
+blue_line_crossed, green_line_crossed = check_for_crossing_lines(blue, green)
+print("blue_line_crossed: " + str(blue_line_crossed))
+print("green_line_crossed: " + str(green_line_crossed))
